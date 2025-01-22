@@ -4,7 +4,7 @@
 
 #include "pin_mux.h"
 volatile int speed=2;
-int speeds[4]={0,0x5F5E0F,0x2FAF07,0x17D783};
+int speeds[4]={0,0xBEBC1E,0x17D783C,0x2FAF078};
 volatile int led_state=0;
 
 void irclk_ini() {
@@ -28,10 +28,13 @@ void leds_init() {
 int check_left_switch() {
     return (int) (PORTC->ISFR & (1 << 12));
 }
+int check_right_switch() {
+    return (int) (PORTC->ISFR & (1 << 3));
+}
 void timer_init() {
     SIM->SCGC6 |= SIM_SCGC6_PIT_MASK; // Habilitar el reloj para el PIT
     PIT->MCR = 0x00;                  // Habilitar PIT
-    PIT->CHANNEL[0].LDVAL = 0x5F5E0F; // Configurar para medio segundo (aproximadamente)
+    PIT->CHANNEL[0].LDVAL = speeds[speed]; // Configurar para medio segundo (aproximadamente)
     PIT->CHANNEL[0].TCTRL = PIT_TCTRL_TIE_MASK | PIT_TCTRL_TEN_MASK; // Habilitar interrupciones y temporizador
     EnableIRQ(PIT_IRQn);// Habilitar interrupción del PIT
 }
@@ -46,17 +49,23 @@ void PIT_IRQHandler(){
         }
     }
 }
-int check_right_switch() {
-    return (int) (PORTC->ISFR & (1 << 3));
-}
+
 void PORTC_PORTD_IRQHandler(){
     if(check_left_switch()){
         if(speed>0)speed-=1;
-        PORTC->ISFR = (1 << 3);
+        PORTC->ISFR = (1 << 12);
     }else if(check_right_switch()){
         if(speed<3)speed+=1;
+        PORTC->ISFR = (1 << 3);
     }
-    PIT->CHANNEL[0].LDVAL = speeds[speed];
+    if(speed==0){
+        LED_GREEN_OFF();
+        DisableIRQ(PIT_IRQn);
+    }else{
+        EnableIRQ(PIT_IRQn);
+        PIT->CHANNEL[0].LDVAL = speeds[speed];
+    }
+
 }
 int main(void){
 
