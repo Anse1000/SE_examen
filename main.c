@@ -1,16 +1,12 @@
 #include "fsl_device_registers.h"
 #include "fsl_debug_console.h"
 #include "board.h"
-
+#include "lcd.h"
 #include "pin_mux.h"
+
 volatile int speed=2;
 int speeds[4]={0,0xBEBC1E,0x17D783C,0x2FAF078};
 volatile int led_state=0;
-
-void irclk_ini() {
-    MCG->C1 = MCG_C1_IRCLKEN(1) | MCG_C1_IREFSTEN(1);
-    MCG->C2 = MCG_C2_IRCS(0); // 0: 32KHZ internal reference clock; 1: 4MHz IRC
-}
 
 void switches_init() {
     SIM->SCGC5 |= 0x800u;
@@ -58,6 +54,20 @@ void PORTC_PORTD_IRQHandler(){
         if(speed<3)speed+=1;
         PORTC->ISFR = (1 << 3);
     }
+    switch (speed) {
+        case 0:
+            lcd_display_dec(0);
+            break;
+        case 1:
+            lcd_display_dec(05);
+            break;
+        case 2:
+            lcd_display_dec(1);
+            break;
+        case 3:
+            lcd_display_dec(2);
+            break;
+    }
     if(speed==0){
         LED_GREEN_OFF();
         DisableIRQ(PIT_IRQn);
@@ -75,6 +85,9 @@ int main(void){
   BOARD_InitDebugConsole();
   switches_init();
   timer_init();
+  lcd_ini();
   leds_init();
+  LED_GREEN_OFF();
+  lcd_display_dec(1);
   for(;;);
 }
