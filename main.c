@@ -1,71 +1,71 @@
-/*
- * The Clear BSD License
- * Copyright (c) 2013 - 2015, Freescale Semiconductor, Inc.
- * Copyright 2016-2017 NXP
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted (subject to the limitations in the disclaimer below) provided
- *  that the following conditions are met:
- *
- * o Redistributions of source code must retain the above copyright notice, this list
- *   of conditions and the following disclaimer.
- *
- * o Redistributions in binary form must reproduce the above copyright notice, this
- *   list of conditions and the following disclaimer in the documentation and/or
- *   other materials provided with the distribution.
- *
- * o Neither the name of the copyright holder nor the names of its
- *   contributors may be used to endorse or promote products derived from this
- *   software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
 #include "fsl_device_registers.h"
 #include "fsl_debug_console.h"
 #include "board.h"
 
 #include "pin_mux.h"
-/*******************************************************************************
- * Definitions
- ******************************************************************************/
+volatile int speed=2;
+int speeds[4]={0,0x5F5E0F,0x2FAF07,0x17D783};
+volatile int led_state=0;
 
+void irclk_ini() {
+    MCG->C1 = MCG_C1_IRCLKEN(1) | MCG_C1_IREFSTEN(1);
+    MCG->C2 = MCG_C2_IRCS(0); // 0: 32KHZ internal reference clock; 1: 4MHz IRC
+}
 
-/*******************************************************************************
- * Prototypes
- ******************************************************************************/
-
-/*******************************************************************************
- * Code
- ******************************************************************************/
-/*!
- * @brief Main function
- */
-int main(void)
-{
-  char ch;
+void switches_init() {
+    SIM->SCGC5 |= 0x800u;
+    PORTC->PCR[3] |= 0xA0102u;
+    PORTC->PCR[12] |= 0xA0102u;
+    GPIOC->PDDR = 0x0u;
+    EnableIRQ(PORTC_PORTD_IRQn);
+}
+void leds_init() {
+    SIM->SCGC5 |= 0x3000u;
+    PORTD->PCR[5] |= 0x100u;
+    GPIOD->PDDR |= 0x20u;
+    GPIOD->PSOR &= ~0x20u;
+}
+int check_left_switch() {
+    return (int) (PORTC->ISFR & (1 << 12));
+}
+void timer_init() {
+    SIM->SCGC6 |= SIM_SCGC6_PIT_MASK; // Habilitar el reloj para el PIT
+    PIT->MCR = 0x00;                  // Habilitar PIT
+    PIT->CHANNEL[0].LDVAL = 0x5F5E0F; // Configurar para medio segundo (aproximadamente)
+    PIT->CHANNEL[0].TCTRL = PIT_TCTRL_TIE_MASK | PIT_TCTRL_TEN_MASK; // Habilitar interrupciones y temporizador
+    EnableIRQ(PIT_IRQn);// Habilitar interrupción del PIT
+}
+void PIT_IRQHandler(){
+    if (PIT->CHANNEL[0].TFLG & PIT_TFLG_TIF_MASK) {
+        PIT->CHANNEL[0].TFLG = PIT_TFLG_TIF_MASK;
+        led_state=!led_state;
+        if(led_state){
+            LED_GREEN_ON();
+        }else{
+            LED_GREEN_OFF();
+        }
+    }
+}
+int check_right_switch() {
+    return (int) (PORTC->ISFR & (1 << 3));
+}
+void PORTC_PORTD_IRQHandler(){
+    if(check_left_switch()){
+        if(speed>0)speed-=1;
+        PORTC->ISFR = (1 << 3);
+    }else if(check_right_switch()){
+        if(speed<3)speed+=1;
+    }
+    PIT->CHANNEL[0].LDVAL = speeds[speed];
+}
+int main(void){
 
   /* Init board hardware. */
   BOARD_InitPins();
   BOARD_BootClockRUN();
   BOARD_InitDebugConsole();
-
-  PRINTF("Plantilla exame Sistemas Embebidos: 1a oportunidade 24/25 Q1\r\n");
-
-  while (1)
-    {
-      ch = GETCHAR();
-      PUTCHAR(ch);
-    }
+  switches_init();
+  timer_init();
+  leds_init();
+  for(;;);
 }
