@@ -1,71 +1,65 @@
-/*
- * The Clear BSD License
- * Copyright (c) 2013 - 2015, Freescale Semiconductor, Inc.
- * Copyright 2016-2017 NXP
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification,
- * are permitted (subject to the limitations in the disclaimer below) provided
- *  that the following conditions are met:
- *
- * o Redistributions of source code must retain the above copyright notice, this list
- *   of conditions and the following disclaimer.
- *
- * o Redistributions in binary form must reproduce the above copyright notice, this
- *   list of conditions and the following disclaimer in the documentation and/or
- *   other materials provided with the distribution.
- *
- * o Neither the name of the copyright holder nor the names of its
- *   contributors may be used to endorse or promote products derived from this
- *   software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE.
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
 
 #include "fsl_device_registers.h"
 #include "fsl_debug_console.h"
 #include "board.h"
 
 #include "pin_mux.h"
-/*******************************************************************************
- * Definitions
- ******************************************************************************/
 
+volatile int leftdoorstate=1;
+volatile int rightdoorstate=1;
+void switches_init() {
+    SIM->SCGC5 |= 0x800u;
+    PORTC->PCR[3] |= 0xA0102u;
+    PORTC->PCR[12] |= 0xA0102u;
+    GPIOC->PDDR = 0x0u;
+    NVIC_EnableIRQ(PORTC_PORTD_IRQn);
+}
+void leds_init() {
+    SIM->SCGC5 |= 0x3000u;
+    PORTD->PCR[5] |= 0x100u;
+    GPIOD->PDDR |= 0x20u;
+    PORTE->PCR[29] = 0x100u;
+    GPIOE->PDDR |= 0x20000000u;
+    GPIOE->PSOR |= 0x20000000u;
+    GPIOD->PSOR |= 0x20u;
+}
+void clear_leds() {
+    GPIOE->PSOR |= 0x20000000u;
+    GPIOD->PSOR |= 0x20u;
+}
 
-/*******************************************************************************
- * Prototypes
- ******************************************************************************/
+int check_left_switch() {
+    return (int) (PORTC->ISFR & (1 << 12));
+}
 
-/*******************************************************************************
- * Code
- ******************************************************************************/
-/*!
- * @brief Main function
- */
-int main(void)
-{
-  char ch;
+int check_right_switch() {
+    return (int) (PORTC->ISFR & (1 << 3));
+}
+void PORTC_PORTD_IRQHandler(){
+    if(check_left_switch()){
+        leftdoorstate=!leftdoorstate;
+        PORTC->ISFR = (1 << 12);
+    }else if(check_right_switch()){
+        rightdoorstate=!rightdoorstate;
+        PORTC->ISFR = (1 << 3);
+    }
+    clear_leds();
+    if(leftdoorstate|rightdoorstate){
+        LED_GREEN_ON();
+    }else if(!leftdoorstate & !rightdoorstate){
+        LED_RED_ON();
+    }
+}
+
+int main(void){
 
   /* Init board hardware. */
   BOARD_InitPins();
   BOARD_BootClockRUN();
   BOARD_InitDebugConsole();
-
-  PRINTF("Plantilla exame Sistemas Embebidos: 1a oportunidade 24/25 Q1\r\n");
-
-  while (1)
-    {
-      ch = GETCHAR();
-      PUTCHAR(ch);
-    }
+  switches_init();
+  leds_init();
+  EnableIRQ(PORTC_PORTD_IRQn);
+  LED_GREEN_ON(); //para estado inicial
+  for(;;);
 }
